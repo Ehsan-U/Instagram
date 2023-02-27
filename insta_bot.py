@@ -14,7 +14,7 @@ from traceback import print_exc
 import requests_cache
 import copy
 import pandas as pd
-
+from playwright_stealth import stealth_sync
 
 
 class LoginError(Exception):
@@ -50,8 +50,8 @@ class Instagram():
 
     def init_playwright(self):
         self.play = sync_playwright().start()
-        self.page = self.play.firefox.launch(headless=False).new_context().new_page()
-
+        self.page = self.play.chromium.launch(headless=False,channel="chrome").new_context().new_page()
+        stealth_sync(self.page)
 
     def init_writer(self):
         self.file = open('results.csv', 'w', newline='', encoding='utf8')
@@ -120,22 +120,25 @@ class Instagram():
 
     def parse_user(self, response):
         if response:
-            username = response.get("user").get("username")
-            item = dict(
-                profile = response.get("user").get("profile_pic_url"),
-                username = username,
-                full_name = response.get("user").get("full_name"),
-                followers = response.get("user").get("follower_count"),
-                following = response.get("user").get("following_count"),
-                posts = response.get("user").get("media_count"),
-                email = response.get("user").get("public_email"),
-                phone = response.get("user").get("contact_phone_number"),
-                city = response.get("user").get("city_name"),
-                bio = response.get("user").get("biography")
-            )
-            self.writer.writerow(item.values())
-            self.counter +=1
-            print(f"\r [+] Records extracted: {self.counter}", end='')
+            try:
+                username = response.get("user").get("username")
+                item = dict(
+                    profile = response.get("user").get("profile_pic_url"),
+                    username = username,
+                    full_name = response.get("user").get("full_name"),
+                    followers = response.get("user").get("follower_count"),
+                    following = response.get("user").get("following_count"),
+                    posts = response.get("user").get("media_count"),
+                    email = response.get("user").get("public_email"),
+                    phone = response.get("user").get("contact_phone_number"),
+                    city = response.get("user").get("city_name"),
+                    bio = response.get("user").get("biography")
+                )
+                self.writer.writerow(item.values())
+                self.counter +=1
+                print(f"\r [+] Records extracted: {self.counter}",end='')
+            except Exception:
+                print_exc()
 
 
     def parse_location(self, response):
@@ -143,21 +146,18 @@ class Instagram():
             user_ids = set(re.findall('(?:"user_id": ")(.*?)(?:")', json.dumps(response)))
             for user_id in user_ids:
                 url = f"https://www.instagram.com:443/api/v1/users/{user_id}/info/"
-                self.start_request(url, callback=self.parse_user, cookies=self.cookies)
+                self.start_request(url, callback=self.parse_user, cookies=self.cookies, cached=True)
             
 
-    def start_request(self, url=None, callback=None, cookies=None):
+    def start_request(self, url=None, callback=None, cookies=None, cached=None):
         try:
-            if cookies:
-                response = self.session.get(url, headers=self.headers, cookies=cookies).json()
+            if cached:
+                response = self.c_session.get(url, headers=self.headers, cookies=cookies).json()
             else:
-                response = self.session.get(url, headers=self.headers).json()
+                response = self.session.get(url, headers=self.headers, cookies=cookies).json()
         except Exception:
-            if self.err_counter == 5:
-                print(" [+] Remove 'cookies.json' and restart the script")
-                raise LoginError()
-            self.err_counter+=1
-            return None
+            print_exc()
+            response = None
         else:
             callback(response)
 
@@ -197,34 +197,20 @@ class Instagram():
         self.err_counter = 1
         self.login_retry = 0
         self.session = requests.Session()
+        self.c_session = requests_cache.CachedSession('cache')
         self.init_writer()
         if not self.load_cookies():
             self.login()
         if self.logged_in:
             locations = self.load_locations()
-            for location in locations:
+            for n,location in enumerate(locations, start=1):
                 location_id = re.search('(?:locations/)(.*?)(?:/)', location).group(1)
                 url = f"https://www.instagram.com/api/v1/locations/web_info/?location_id={location_id}"
                 try:
                     self.start_request(url, callback=self.parse_location, cookies=self.cookies)
-                except LoginError:
-                    if self.login_retry == 2:
-                        break
-                    else:
-                        time.sleep(5)
-                        self.login_retry +=1
-                        self.logged_in = False
-                        self.login()
-                        if self.logged_in:
-                            continue
-                        else:
-                            break
                 except KeyboardInterrupt:
                     break
-                except Exception:
-                    continue
         self.file.close()
-        self.session.close()
         print(f" [+] Finished")
         self.send_email()
         print(f" [+] Done")
