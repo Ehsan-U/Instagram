@@ -206,7 +206,7 @@ class Instagram():
                 location_id = re.search('(?:locations/)(.*?)(?:/)', location).group(1)
                 url = f"https://www.instagram.com/api/v1/locations/web_info/?location_id={location_id}"
                 try:
-                    self.start_request(url, callback=self.parse_location)
+                    self.start_request(url, callback=self.parse_location, cookies=self.cookies)
                 except LoginError:
                     if self.login_retry == 2:
                         break
@@ -222,7 +222,7 @@ class Instagram():
                 except KeyboardInterrupt:
                     break
                 except Exception:
-                    pass
+                    continue
         self.file.close()
         self.session.close()
         print(f" [+] Finished")
