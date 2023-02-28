@@ -14,7 +14,8 @@ from traceback import print_exc
 import requests_cache
 import copy
 import pandas as pd
-from playwright_stealth import stealth_sync
+import random
+
 
 
 class LoginError(Exception):
@@ -45,13 +46,15 @@ class Instagram():
     }
     # session = requests_cache.CachedSession('cache')
     start_url = 'https://www.instagram.com/accounts/login/'
+    
+
 
 
 
     def init_playwright(self):
         self.play = sync_playwright().start()
         self.page = self.play.chromium.launch(headless=False,channel="chrome").new_context().new_page()
-        stealth_sync(self.page)
+
 
     def init_writer(self):
         self.file = open('results.csv', 'w', newline='', encoding='utf8')
@@ -151,6 +154,7 @@ class Instagram():
 
     def start_request(self, url=None, callback=None, cookies=None, cached=None):
         try:
+            time.sleep(random.choice([3,6]))
             if cached:
                 response = self.c_session.get(url, headers=self.headers, cookies=cookies).json()
             else:
